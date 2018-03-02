@@ -3467,6 +3467,9 @@ void handle_json()
  
       reply += F("\"TaskName\": \"");
       reply += ExtraTaskSettings.TaskDeviceName;
+      reply += F("\",\n");
+      reply += F("\"Type\": \"");
+      reply += getPluginNameFromDeviceIndex(getDeviceIndex(Settings.TaskDeviceNumber[TaskIndex]));
       reply += F("\"");
       if (Device[DeviceIndex].ValueCount != 0)
         reply += F(",");
