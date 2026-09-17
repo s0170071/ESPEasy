@@ -96,3 +96,7 @@ src/Custom_.h
 compile_commands.json
 
 *.Identifier
+
+# Flash-partition dumps taken before reflashing a unit.
+# These contain security.dat, i.e. WiFi credentials in the clear.
+/backup/

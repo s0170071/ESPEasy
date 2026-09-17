@@ -7,6 +7,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "../PluginStructs/P122_data_struct.h"
+#include <math.h>
 #ifdef USES_P122
 
 //  SUPPORTED SHT2x COMMANDS
@@ -45,7 +46,8 @@ P122_data_struct::P122_data_struct() {}
 
 // Initialize/setup device properties
 // Must be called at least once before oP122::Wairperating the device
-bool P122_data_struct::setupDevice(uint8_t i2caddr, uint8_t resolution)
+bool P122_data_struct::setupDevice(uint8_t i2caddr,
+                                   uint8_t resolution)
 {
   _i2caddr    = i2caddr;
   _resolution = resolution;
@@ -302,6 +304,36 @@ float P122_data_struct::getTemperature() const
 float P122_data_struct::getHumidity() const
 {
   return -6.0f + (125.0f / 65536.0f) * _rawHumidity; // Datasheet par  6.1
+}
+
+float P122_data_struct::getAbsoluteHumidity() const
+{
+  const float temperature = getTemperature();
+  const float humidity    = getHumidity();
+
+  if (isnan(temperature) || isnan(humidity)) {
+    return NAN;
+  }
+
+  const double k1 = (17.67 * temperature) / (temperature + 253.5);
+  return (6.112 * exp(k1) * humidity * 2.1674) / (273.15 + temperature);
+}
+
+float P122_data_struct::getDoVent() const
+{
+  const float temperature = getTemperature();
+  const float humidity    = getHumidity();
+
+  if (isnan(temperature) || isnan(humidity)) {
+    return NAN;
+  }
+
+  double moldHumidity = 0.000038720 * temperature * temperature * temperature * temperature;
+  moldHumidity       -= 0.003965321 * temperature * temperature * temperature;
+  moldHumidity       += 0.149368329 * temperature * temperature;
+  moldHumidity       -= 2.596918188 * temperature;
+  moldHumidity       += 94.660142724;
+  return humidity > moldHumidity ? 1.0f : 0.0f;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////

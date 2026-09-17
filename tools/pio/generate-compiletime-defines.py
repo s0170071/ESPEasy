@@ -18,11 +18,36 @@ def compute_version_date():
 
 
 def create_RFC1123_build_date():
-    return datetime.datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+    return get_stable_build_times()["rfc1123"]
 
 
 def create_build_unixtime():
-    return int( time.time() )
+    return get_stable_build_times()["unix"]
+
+
+_stable_build_times = None
+
+
+def get_stable_build_times():
+    global _stable_build_times
+    if _stable_build_times is not None:
+        return _stable_build_times
+
+    cache_file = os.path.join(env.subst("$BUILD_DIR"), "compiletime_defines.json")
+    try:
+        with open(cache_file, "r") as cached:
+            _stable_build_times = json.load(cached)
+    except (OSError, ValueError, TypeError, KeyError):
+        now = int(time.time())
+        _stable_build_times = {
+            "unix": now,
+            "rfc1123": datetime.datetime.utcfromtimestamp(now).strftime('%a, %d %b %Y %H:%M:%S GMT')
+        }
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        with open(cache_file, "w") as cached:
+            json.dump(_stable_build_times, cached)
+
+    return _stable_build_times
 
 
 def create_binary_filename():

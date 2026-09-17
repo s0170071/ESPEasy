@@ -13,6 +13,8 @@
 # define PLUGIN_NAME_122   "Environment - SHT2x" // What will be dislpayed in the selection list
 # define PLUGIN_VALUENAME1_122 "Temperature"     // variable output of the plugin. The label is in quotation marks
 # define PLUGIN_VALUENAME2_122 "Humidity"        // multiple outputs are supported
+# define PLUGIN_VALUENAME3_122 "AbsoluteHumidity"
+# define PLUGIN_VALUENAME4_122 "doVent"
 
 //   PIN/port configuration is stored in the following:
 //   CONFIG_PIN1 - The first GPIO pin selected within the task
@@ -54,15 +56,13 @@ boolean Plugin_122(uint8_t function, struct EventStruct *event, String& string)
       auto& dev = Device[++deviceCount];
       dev.Number           = PLUGIN_ID_122;
       dev.Type             = DEVICE_TYPE_I2C;
-      dev.VType            = Sensor_VType::SENSOR_TYPE_TEMP_HUM;
+      dev.VType            = Sensor_VType::SENSOR_TYPE_QUAD;
       dev.FormulaOption    = true;
-      dev.ValueCount       = 2;
+      dev.ValueCount       = 4;
       dev.SendDataOption   = true;
       dev.TimerOption      = true;
       dev.I2CNoDeviceCheck = true;
-
-      // dev.GlobalSyncOption   = true;
-      dev.PluginStats    = true;
+      dev.PluginStats      = true;
       dev.OutputDataType = Output_Data_type_t::Default;
       break;
     }
@@ -81,6 +81,8 @@ boolean Plugin_122(uint8_t function, struct EventStruct *event, String& string)
       // For plugins able to choose output types, see P026_Sysinfo.ino.
       strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[0], PSTR(PLUGIN_VALUENAME1_122));
       strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[1], PSTR(PLUGIN_VALUENAME2_122));
+      strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[2], PSTR(PLUGIN_VALUENAME3_122));
+      strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[3], PSTR(PLUGIN_VALUENAME4_122));
       break;
     }
 
@@ -109,8 +111,8 @@ boolean Plugin_122(uint8_t function, struct EventStruct *event, String& string)
 
       if (function == PLUGIN_WEBFORM_SHOW_I2C_PARAMS)
       {
-        addFormSelectorI2C(F("i2c_addr"), 2, i2cAddressValues, P122_I2C_ADDRESS);
-        addFormNote(F("ADO Low=0x40, High=0x41"));
+          addFormNote(F("ADO Low=0x40, High=0x41"));
+          addFormSelectorI2C(F("i2c_addr"), 2, i2cAddressValues, P122_I2C_ADDRESS);
       }
       else
       {
@@ -121,6 +123,9 @@ boolean Plugin_122(uint8_t function, struct EventStruct *event, String& string)
 
     case PLUGIN_WEBFORM_LOAD:
     {
+      // The I2C address selector is rendered from PLUGIN_WEBFORM_SHOW_I2C_PARAMS, together
+      // with the bus and multiplexer channel selectors that the core adds for I2C devices.
+
       // this case defines what should be displayed on the web form, when this plugin is selected
       // The user's selection will be stored in
       // PCONFIG(x) (custom configuration)
@@ -196,6 +201,7 @@ boolean Plugin_122(uint8_t function, struct EventStruct *event, String& string)
       UserVar.setFloat(event->TaskIndex, 0, NAN);
       UserVar.setFloat(event->TaskIndex, 1, NAN);
       UserVar.setFloat(event->TaskIndex, 2, NAN);
+      UserVar.setFloat(event->TaskIndex, 3, NAN);
       break;
     }
 
@@ -211,12 +217,20 @@ boolean Plugin_122(uint8_t function, struct EventStruct *event, String& string)
         {
           UserVar.setFloat(event->TaskIndex, 0, NAN);
           UserVar.setFloat(event->TaskIndex, 1, NAN);
+          UserVar.setFloat(event->TaskIndex, 2, NAN);
+          UserVar.setFloat(event->TaskIndex, 3, NAN);
           addLog(LOG_LEVEL_ERROR, F("SHT2x: in Error!"));
         }
         else if (P122_data->newValues())
         {
-          UserVar.setFloat(event->TaskIndex, 0, P122_data->getTemperature());
-          UserVar.setFloat(event->TaskIndex, 1, P122_data->getHumidity());
+          const float temperature      = P122_data->getTemperature();
+          const float humidity         = P122_data->getHumidity();
+          const float absoluteHumidity = P122_data->getAbsoluteHumidity();
+          const float doVent           = P122_data->getDoVent();
+          UserVar.setFloat(event->TaskIndex, 0, temperature);
+          UserVar.setFloat(event->TaskIndex, 1, humidity);
+          UserVar.setFloat(event->TaskIndex, 2, absoluteHumidity);
+          UserVar.setFloat(event->TaskIndex, 3, doVent);
           P122_data->startMeasurements(); // getting ready for another read cycle
         }
       }
@@ -224,9 +238,11 @@ boolean Plugin_122(uint8_t function, struct EventStruct *event, String& string)
       if (loglevelActiveFor(LOG_LEVEL_INFO))
       {
         addLog(LOG_LEVEL_INFO,
-               strformat(F("P122: Temperature: %s Humidity: %s"),
+               strformat(F("P122: Temperature: %s Humidity: %s AbsoluteHumidity: %s doVent: %s"),
                          formatUserVarNoCheck(event, 0).c_str(),
-                         formatUserVarNoCheck(event, 1).c_str()
+                         formatUserVarNoCheck(event, 1).c_str(),
+                         formatUserVarNoCheck(event, 2).c_str(),
+                         formatUserVarNoCheck(event, 3).c_str()
                          ));
       }
       success = true;

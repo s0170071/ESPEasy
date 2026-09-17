@@ -4,11 +4,19 @@ import glob
 import filecmp
 
 def do_concat_cpp_files(cpp_files, output_file):
+    content = bytearray()
+    for filename in cpp_files:
+        with open(filename, 'rb') as hf:
+            content.extend(hf.read())
+            content.extend(os.linesep.encode())
+
+    if os.path.exists(output_file):
+        with open(output_file, 'rb') as existing:
+            if existing.read() == content:
+                return
+
     with open(output_file, 'wb') as newf:
-        for filename in cpp_files:
-            with open(filename, 'rb') as hf:
-                newf.write(hf.read())
-                newf.write(os.linesep.encode())  # append newline to separate files.
+        newf.write(content)
 
 
 def concat_cpp_files(paths_to_concat):
@@ -36,9 +44,6 @@ def concat_cpp_files(paths_to_concat):
                     fullname = os.path.join(root, file)
                     cpp_files.append(fullname)
                     print("\u001b[33m Add: \u001b[0m  {}".format(fullname))
-
-        if os.path.exists(tmp_cpp_file):
-            os.remove(tmp_cpp_file)
 
     do_concat_cpp_files(cpp_files, tmp_cpp_file)
 

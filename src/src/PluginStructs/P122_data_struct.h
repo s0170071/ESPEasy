@@ -92,6 +92,8 @@ public:
   // Note: values are fetched from memory and reflect latest succesful read cycle
   float    getTemperature() const;
   float    getHumidity() const;
+  float    getAbsoluteHumidity() const;
+  float    getDoVent() const;
   uint16_t getRawTemperature() const;
   uint16_t getRawHumidity() const;
 
