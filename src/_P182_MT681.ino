@@ -16,12 +16,23 @@
    Wiring: an IR read head on the meter, its data output to the configured RX GPIO.
    The interface is receive-only; leaving TX unassigned is fine and recommended.
    Default line settings of the MT681 are 9600 baud 8N1.
+   The selected task port is independent of the UART0 serial console.
+   For the existing openHAB Sensors/EHZ topics, enable Controller 1 on this task
+   and name the values PowerSell, PowerBuy, CurrentPower (in that order).
 
    Original plugin by s0170071. Ported to the current ESPEasy API and to ESP32 by
    replacing the ESP8266-only Serial.swap() with a regular ESPEasySerial port selection.
  */
 
 /** Changelog:
+ * 2026-10-17: Rewrote the SML decoder to follow the specification: transport layer is parsed in
+ *             4-byte aligned words (escape sequences, padding, CRC16 over the whole datagram),
+ *             the payload is decoded with a real TL (type/length) parser instead of byte pattern
+ *             scanning, honouring unit and scaler. Fixed the OBIS matching (1.8.0/2.8.0 are
+ *             ...08 00 ff, the old code matched the tariff 1.8.1/2.8.1) and the 512 byte
+ *             datagram limit.
+ * 2026-10-17: Validate UART startup, add optional RX inversion and receive diagnostics.
+ *             Document the existing openHAB value-name mapping.
  * 2026-09-16: Ported to current plugin API (ESPEasySerial, PluginTaskData, UserVar setters).
  *             Fixed the Integer64 decode, which shifted past the width of the accumulator,
  *             and the unbounded forward scan in getSMLValue().
@@ -41,6 +52,10 @@
 
 # define P182_BAUDRATE       PCONFIG_LONG(0)
 # define P182_BAUDRATE_LABEL F("p182_baud")
+# define P182_INVERT_RX      PCONFIG(0)
+# define P182_INVERT_LABEL   F("p182_invert")
+# define P182_RX_PULLUP      PCONFIG(1)
+# define P182_PULLUP_LABEL   F("p182_pullup")
 
 
 boolean Plugin_182(uint8_t function, struct EventStruct *event, String& string)
@@ -86,6 +101,8 @@ boolean Plugin_182(uint8_t function, struct EventStruct *event, String& string)
     case PLUGIN_SET_DEFAULTS:
     {
       P182_BAUDRATE = 9600;
+      P182_INVERT_RX = 0;
+      P182_RX_PULLUP = 1;
       success       = true;
       break;
     }
@@ -102,6 +119,20 @@ boolean Plugin_182(uint8_t function, struct EventStruct *event, String& string)
       addFormNumericBox(F("Baud Rate"), P182_BAUDRATE_LABEL, P182_BAUDRATE, 300, 115200);
       addUnit(F("baud"));
       addFormNote(F("The MT681 optical interface uses 9600 baud, 8N1."));
+      addFormCheckBox(F("Invert RX"), P182_INVERT_LABEL, P182_INVERT_RX);
+      addFormNote(F("Enable for optical read heads with an inverted UART output."));
+      addFormCheckBox(F("RX pull-up"), P182_PULLUP_LABEL, P182_RX_PULLUP);
+      addFormNote(F("Enable the internal pull-up on RX, for read heads with an open-collector output."));
+      const P182_data_struct *data =
+        static_cast<P182_data_struct *>(getPluginTaskData(event->TaskIndex));
+      if ((nullptr != data) && data->isInitialized()) {
+        addFormNote(strformat(F("SML RX bytes: %u; frames started: %u; valid frames: %u; CRC errors: %u; dropped frames: %u; last frame length: %u"),
+                              data->receivedBytes(), data->startedFrames(), data->validFrames(),
+                              data->crcErrors(), data->droppedFrames(), data->lastFrameLength()));
+        addFormNote(concat(F("First RX bytes: "), data->receiveSample()));
+      } else {
+        addFormNote(F("SML serial port is not initialized."));
+      }
       success = true;
       break;
     }
@@ -109,6 +140,8 @@ boolean Plugin_182(uint8_t function, struct EventStruct *event, String& string)
     case PLUGIN_WEBFORM_SAVE:
     {
       P182_BAUDRATE = getFormItemInt(P182_BAUDRATE_LABEL);
+      P182_INVERT_RX = isFormItemChecked(P182_INVERT_LABEL);
+      P182_RX_PULLUP = isFormItemChecked(P182_PULLUP_LABEL);
       success       = true;
       break;
     }
@@ -123,7 +156,9 @@ boolean Plugin_182(uint8_t function, struct EventStruct *event, String& string)
                          new (std::nothrow) P182_data_struct(port,
                                                              CONFIG_PIN1,
                                                              CONFIG_PIN2,
-                                                             static_cast<unsigned long>(P182_BAUDRATE)));
+                                                             static_cast<unsigned long>(P182_BAUDRATE),
+                                                             P182_INVERT_RX != 0,
+                                                             P182_RX_PULLUP != 0));
       P182_data_struct *P182_data =
         static_cast<P182_data_struct *>(getPluginTaskData(event->TaskIndex));
 
